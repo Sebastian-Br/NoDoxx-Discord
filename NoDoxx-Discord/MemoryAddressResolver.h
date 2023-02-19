@@ -29,12 +29,28 @@ private:
 	DWORD GetModuleBaseAddress();
 public:
 
-	MemoryAddressResolver(); //do not use this constructor
+	MemoryAddressResolver(); //do not use this constructor - it only exists to prevent a compilation error
+	/// <summary>
+	/// Using this constructor, the process name and module name are the same.
+	/// If there exist multiple processes with the same name, the nth=1 process is believed to be the one you're interested in.
+	/// </summary>
+	/// <param name="_process_name">The name of the process. This process must also be the module you're interested in.</param>
 	MemoryAddressResolver(std::string _process_name);
-	MemoryAddressResolver(std::string _process_name, std::string _module_name);
-	void AddOffset(unsigned int offset);
 
-	
+	/// <summary>
+	/// Using this constructor, the process name and module name can be specified separately, e.g. "Discord.exe" and "textinputframework.dll"
+	/// If there exist multiple processes with the same name, the nth=1 process is believed to be the one you're interested in.
+	/// </summary>
+	/// <param name="_process_name">The name of the process in whose address space the module resides.</param>
+	/// <param name="_module_name">The name of the module that this process loaded containing the data you're interested in.</param>
+	MemoryAddressResolver(std::string _process_name, std::string _module_name);
+
+	/// <summary>
+	/// Adds an offset to the list of offsets.
+	/// When using CE, add the offsets starting from the very bottom upwards.
+	/// </summary>
+	/// <param name="offset">The offset to be added</param>
+	void AddOffset(unsigned int offset);
 
 	/// <summary>
 	/// Retrieves the base address of module, then adds the first offset to it and reads the value at that memory address.
@@ -50,5 +66,8 @@ public:
 	DWORD module_base_address;
 	std::list<unsigned int> offsets;
 
+	/// <summary>
+	/// If this is 1, the first process will be chosen if there are different processes that share the same name
+	/// </summary>
 	int nth_process;
 };

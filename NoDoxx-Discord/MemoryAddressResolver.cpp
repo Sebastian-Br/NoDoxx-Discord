@@ -13,16 +13,25 @@ DWORD MemoryAddressResolver::GetModuleBaseAddress() // see: https://learn.micros
 	list<int> dwPIDs = GetProcessIDs(); // produces a weird error when DWORD is used as the template type
 	if (dwPIDs.size() == 0)
 	{
-		_tprintf(TEXT("GetModuleBaseAddress(): Process not found!")); // _tprintf(TEXT(""));
+		_tprintf(TEXT("MemoryAddressResolver::GetModuleBaseAddress() Process not found!")); // _tprintf(TEXT(""));
 		return 0;
 	}
 
-	std::cout << "GetModuleBaseAddress(): Nr of processes found: " << dwPIDs.size() << endl;
+	std::cout << "MemoryAddressResolver::GetModuleBaseAddress() Nr of processes found: " << dwPIDs.size() << endl;
 
 	int current_nth_process = 0;
 	for (DWORD dwPID : dwPIDs) {
 		current_nth_process++;
-		if (current_nth_process == nth_process) {
+		if (nth_process > 0) {
+			if (current_nth_process == nth_process) {
+				DWORD result = GetBaseAddressOfModuleInProcess(dwPID);
+				if (result != 0) {
+					process_id = dwPID;
+					return result;
+				}
+			}
+		}
+		else {
 			DWORD result = GetBaseAddressOfModuleInProcess(dwPID);
 			if (result != 0) {
 				process_id = dwPID;
@@ -31,7 +40,7 @@ DWORD MemoryAddressResolver::GetModuleBaseAddress() // see: https://learn.micros
 		}
 	}
 
-	_tprintf(TEXT("GetModuleBaseAddress(): Module Base Address not found!"));
+	_tprintf(TEXT("MemoryAddressResolver::GetModuleBaseAddress() Module Base Address not found!"));
 	return 0;
 }
 
@@ -68,14 +77,11 @@ DWORD MemoryAddressResolver::GetBaseAddressOfModuleInProcess(DWORD processID)
 	HANDLE process_handle;
 	DWORD bytes_needed;
 
-	printf("\nGetBaseAddressOfModuleInProcess() Process ID: %u\n", processID);
+	printf("\nMemoryAddressResolver::GetBaseAddressOfModuleInProcess() Process ID: %u\n", processID);
 
-	// Get a handle to the process.
-	process_handle = OpenProcess(PROCESS_QUERY_INFORMATION |
-		PROCESS_VM_READ,
-		FALSE, processID);
+	process_handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, processID);
 	if (NULL == process_handle)
-		return 1;
+		return 0;
 
 	// Get a list of all the modules in this process and save it to modules
 	if (EnumProcessModulesEx(process_handle, modules, sizeof(modules), &bytes_needed, LIST_MODULES_ALL))
@@ -83,10 +89,8 @@ DWORD MemoryAddressResolver::GetBaseAddressOfModuleInProcess(DWORD processID)
 		for (int i = 0; i < (bytes_needed / sizeof(HMODULE)); i++)
 		{
 			WCHAR current_module_name[MAX_PATH];
-
 			// Write the module name to tmp_module_name
-			if (GetModuleBaseNameW(process_handle, modules[i], current_module_name,
-				sizeof(current_module_name) / sizeof(WCHAR)))
+			if (GetModuleBaseNameW(process_handle, modules[i], current_module_name,sizeof(current_module_name) / sizeof(WCHAR)))
 			{
 				wstring targetmodulename_wstring(module_name.begin(), module_name.end()); // this is the module name we're looking for
 				const wchar_t* targetmodulename_wchars = targetmodulename_wstring.c_str();
@@ -100,15 +104,14 @@ DWORD MemoryAddressResolver::GetBaseAddressOfModuleInProcess(DWORD processID)
 		}
 	}
 
-	// Release the handle to the process.
 	CloseHandle(process_handle);
-
 	return 0;
 }
 
 
 MemoryAddressResolver::MemoryAddressResolver()
 {
+	//Left blank on purpose. Do not use this constructor.
 }
 
 /// <summary>
@@ -160,13 +163,13 @@ DWORD MemoryAddressResolver::Resolve()
 		size_t bytes_read = 0;
 		ReadProcessMemory(process_handle, (LPCVOID)read_address, &read_dword, sizeof(read_dword), &bytes_read);
 		if (bytes_read != 4) {
-			cout << "Resolve(): [ERROR] bytes_read != 4";
+			cout << "MemoryAddressResolver::Resolve() [ERROR] bytes_read != 4: " << bytes_read << endl;
 			CloseHandle(process_handle);
 			return 0;
 		}
 
 		if (read_dword == NULL) {
-			cout << "Resolve(): [ERROR] read_dword == NULL";
+			cout << "MemoryAddressResolver::Resolve() [ERROR] read_dword == NULL" << endl;
 			CloseHandle(process_handle);
 			return 0;
 		}
