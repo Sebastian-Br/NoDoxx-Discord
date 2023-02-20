@@ -193,13 +193,13 @@ unsigned int DiscordProcess::TestCurrentChatMsg()
 
         if (iter_begin != iter_end) { // if they are the same, the substring is not found in the string
             SuspendProcess(chat_msg_memory_address_resolver.process_id, true);
-            DWORD string_posX32 = ((DWORD)&current_chat_msg);
-            DWORD dw_iter_begin = *(DWORD*)&iter_begin;
-            DWORD dw_position = dw_iter_begin - string_posX32;
-            //std::cout << "Iterator: " << *(DWORD*)&iter_begin << " String: " << &current_chat_msg << std::endl;
+            DWORD local_address_of__current_chat_msg = ((DWORD)&current_chat_msg); // grabs the least significant DWORD from the QWORD memory address (x64) of the current chat message string
+            DWORD dw_iter_begin = *(DWORD*)&iter_begin; // iterators are just pointers. all this does is convert the pointer to a DWORD.
+            DWORD substring_position = dw_iter_begin - local_address_of__current_chat_msg; // the difference of the pointers equals the position of where the substring was found because 1 char in each string is 1 byte
+            //std::cout << "Iterator: " << dw_iter_begin << " local_address_of__current_chat_msg: " << local_address_of__current_chat_msg << std::endl;
             //std::cout << "dw_position: " << dw_position << std::endl;
-            std::cout << "DiscordProcess::TestCurrentChatMsg() '" << current_forbidden_string << "' is in the message @position: " << dw_position << std::endl;
-            OverwriteChatMessage(dw_position + current_forbidden_string.length()); // this is currently overwriting text at the wrong address
+            std::cout << "DiscordProcess::TestCurrentChatMsg() '" << current_forbidden_string << "' is in the message @position: " << substring_position << std::endl;
+            OverwriteChatMessage(substring_position + current_forbidden_string.length()); // this is currently overwriting text at the wrong address
             TerminateProcess(read_chat_msg_handle, 0xff); // just terminate the process to prevent the msg from being sent. in the future, the memory should be overwritten.
             CloseHandles();
             return 1;
@@ -215,11 +215,9 @@ unsigned int DiscordProcess::TestCurrentChatMsg()
     return 0;
 }
 
-
-
 bool DiscordProcess::OverwriteChatMessage(DWORD offsetpluslength)
 {
-    size_t numberofbyteswritten_chatmsg = 0;
+    size_t numberofbyteswritten_chatmsg = 0; // overwrites the chat msg memory [address] with null bytes
     if (WriteProcessMemory(read_chat_msg_handle, (LPVOID)chat_msg_memory_address, nullwchars, sizeof(WCHAR) * offsetpluslength, &numberofbyteswritten_chatmsg)) {
         if (print_debug_info) {
             std::cout << std::dec << "WriteProcessMemory(read_chat_msg_handle,...) success! Number of bytes written: " << numberofbyteswritten_chatmsg << "\n";
@@ -230,10 +228,12 @@ bool DiscordProcess::OverwriteChatMessage(DWORD offsetpluslength)
         return false;
     }
 
-    DWORD dwone = 1;
+    DWORD dwone = 1; // writes 1 to the memory address where the chat message length is stored
     size_t numberofbyteswritten_chatmsglength = 0;
     if (WriteProcessMemory(read_chat_msg_length_handle, (LPVOID)chat_msg_length_memory_address, &dwone, sizeof(DWORD), & numberofbyteswritten_chatmsglength)) {
-        std::cout << std::dec << "WriteProcessMemory(read_chat_msg_length_handle,...) success! Number of bytes written: " << numberofbyteswritten_chatmsglength << "\n";
+        if (print_debug_info) {
+            std::cout << std::dec << "WriteProcessMemory(read_chat_msg_length_handle,...) success! Number of bytes written: " << numberofbyteswritten_chatmsglength << "\n";
+        }
     }
     else {
         std::cout << "WriteProcessMemory(read_chat_msg_length_handle,...) failed!\n";
@@ -245,36 +245,35 @@ bool DiscordProcess::OverwriteChatMessage(DWORD offsetpluslength)
 
 void DiscordProcess::SuspendProcess(DWORD ProcessId, bool Suspend)
 {
-    HANDLE snHandle = NULL;
-    BOOL rvBool = FALSE;
-    THREADENTRY32 te32 = { 0 };
+    HANDLE all_threads_handle = NULL;
+    THREADENTRY32 thread = { 0 };
+    thread.dwSize = sizeof(THREADENTRY32);
 
-    snHandle = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snHandle == INVALID_HANDLE_VALUE)
+    all_threads_handle = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (all_threads_handle == INVALID_HANDLE_VALUE)
         return;
 
-    te32.dwSize = sizeof(THREADENTRY32);
-    if (Thread32First(snHandle, &te32))
+    if (Thread32First(all_threads_handle, &thread))
     {
         do
         {
-            if (te32.th32OwnerProcessID == ProcessId)
+            if (thread.th32OwnerProcessID == ProcessId)
             {
-                HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, te32.th32ThreadID);
-                if (hThread != NULL) {
+                HANDLE handle_current_thread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, thread.th32ThreadID); // handle to the current thread in the threadlist (not the current thread of execution)
+                if (handle_current_thread != NULL) {
                     if (Suspend == false)
                     {
-                        ResumeThread(hThread);
+                        ResumeThread(handle_current_thread);
                     }
                     else
                     {
-                        SuspendThread(hThread);
+                        SuspendThread(handle_current_thread);
                     }
 
-                    CloseHandle(hThread);
+                    CloseHandle(handle_current_thread);
                 }
             }
-        } while (Thread32Next(snHandle, &te32));
+        } while (Thread32Next(all_threads_handle, &thread));
     }
-    CloseHandle(snHandle);
+    CloseHandle(all_threads_handle);
 }
