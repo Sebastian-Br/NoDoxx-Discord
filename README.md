@@ -17,3 +17,6 @@ Currently, this project uses the memory address whose access-signature looks lik
 02C05486 - mov [eax+ecx*2],dx <<<br>
 02C0548A - mov edx,edi<br>
 02C0548C - add ecx,01<br>
+
+<br>
+Discord has stopped working for me for a long time so the above offsets are almost certainly not going to work anymore!
